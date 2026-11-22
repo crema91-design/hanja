@@ -193,6 +193,23 @@ try{const s=JSON.parse(localStorage.getItem(KEY)||'null'); if(s) S=Object.assign
   delete S.onlyNew;
 })();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
+function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function backupJSON(){return JSON.stringify({v:1,at:Date.now(),sr:S.sr});}
+function downloadBackup(){
+  try{const b=new Blob([backupJSON()],{type:'application/json'});const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=`한자기록_${today()}.json`;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);S.lastBk=today();save();return true;}catch(e){return false;}
+}
+function mergeBackup(txt){
+  const o=JSON.parse(String(txt).trim()); if(!o||typeof o.sr!=='object') throw 0;
+  let n=0;for(const h in o.sr){const a=o.sr[h],b=S.sr[h];if(BY[h]&&a&&typeof a.s==='number'&&(!b||(a.n||0)>(b.n||0))){S.sr[h]=a;n++;}}
+  save(); return n;
+}
+function pickBackupFile(cb){
+  const i=document.createElement('input');i.type='file';i.accept='.json,application/json,text/plain';
+  i.onchange=()=>{const f=i.files[0];if(!f)return;f.text().then(t=>{try{cb(null,mergeBackup(t));}catch(e){cb(e);}});};i.click();
+}
 
 const $=s=>document.querySelector(s);
 const app=$('#app');
@@ -240,6 +257,9 @@ function renderHome(){
   const nextR=Object.values(S.sr).filter(r=>r.d>now).sort((a,b)=>a.d-b.d)[0];
   app.innerHTML=`
   <header><h1>필수한자 <span class="hz">千八百</span></h1><span class="muted">교육용 기초한자</span></header>
+  ${learned?'':`<div class="panel"><p style="margin:0 0 8px;font-weight:700">기록이 비어 있어요</p>
+   <p class="muted" style="margin:0 0 10px">전에 저장된 백업 파일(한자기록_날짜.json)이 있으면 불러와서 이어서 공부할 수 있어요.</p>
+   <button class="big ghost" id="restoreTop">백업 파일 불러오기</button><div class="muted" id="restoreMsg" style="margin-top:6px"></div></div>`}
   <div class="panel due">
     <div style="display:flex;justify-content:space-between;align-items:flex-end">
       <div><h2>지금 복습할 한자</h2><div class="muted">잊어버리기 직전에 다시 보는 게 핵심이에요</div></div>
@@ -279,12 +299,14 @@ function renderHome(){
   </div>
   <div class="foot">· 맞히면 다음 단계로, 틀리면 처음(10분 뒤)부터 다시 시작해요. 7단계(60일)를 통과하면 장기기억이에요.<br>
   · 매일 복습할 한자를 먼저 끝내고 새 한자를 배우는 게 좋아요.<br>
-  · 기록은 이 폰의 브라우저에만 저장돼요. 브라우저 데이터를 지우면 함께 지워질 수 있어요.<br>
+  · 기록은 이 폰에 저장돼요. 크롬 인터넷 기록 삭제 때 '쿠키 및 사이트 데이터'를 체크하면 함께 지워지니, 백업 파일을 꼭 남겨 두세요.<br>
   <button class="danger" id="bkBtn" style="margin-right:14px">기록 백업·불러오기</button><button class="danger" id="resetBtn">학습 기록 초기화</button>
   <div id="bkBox" style="display:none">
     <div class="muted" style="margin-top:6px">아래 글자를 복사해 두었다가, 다른 곳의 앱에서 붙여 넣고 "불러오기"를 누르면 기록이 옮겨져요.</div>
     <textarea class="bk" id="bkText"></textarea>
     <div class="bkrow"><button id="bkCopy">복사하기</button><button id="bkLoad">불러오기</button></div>
+    <div class="bkrow"><button id="bkFile">백업 파일 저장</button><button id="bkFileLoad">백업 파일 불러오기</button></div>
+    <div class="muted" style="margin-top:6px">하루에 한 번, 공부를 마치면 백업 파일이 다운로드 폴더에 자동 저장돼요. 인터넷 기록을 지워도 다운로드한 파일은 남아요.${S.lastBk?` (마지막 백업: ${S.lastBk})`:''}</div>
     <div class="muted" id="bkMsg" style="margin-top:6px"></div>
   </div>
   <div class="cfm" id="cfm"><button id="cfmNo">취소</button><button class="d" id="cfmYes">모두 지우기</button></div></div>`;
@@ -293,10 +315,13 @@ function renderHome(){
   app.querySelectorAll('#segMode button').forEach(b=>b.onclick=()=>{S.mode=b.dataset.v;save();renderHome();});
   app.querySelectorAll('#segOrder button').forEach(b=>b.onclick=()=>{S.order=b.dataset.v;save();renderHome();});
   if($('#goDue')) $('#goDue').onclick=startDue;
+  if($('#restoreTop')) $('#restoreTop').onclick=()=>pickBackupFile((e,n)=>{ if(e){$('#restoreMsg').textContent='파일을 읽지 못했어요. 한자기록 백업 파일인지 확인해 주세요.';return;} $('#restoreMsg').textContent=`${n}자의 기록을 불러왔어요.`; setTimeout(renderHome,1000); });
   $('#goNew').onclick=startNew;
   $('#resetBtn').onclick=()=>$('#cfm').classList.add('open');
   $('#bkBtn').onclick=()=>{const b=$('#bkBox');b.style.display=b.style.display==='none'?'block':'none';$('#bkText').value=JSON.stringify({v:1,sr:S.sr});};
   $('#bkCopy').onclick=async()=>{const t=$('#bkText');try{await navigator.clipboard.writeText(t.value);$('#bkMsg').textContent='복사했어요. 다른 앱에서 붙여 넣으세요.';}catch(e){t.select();$('#bkMsg').textContent='자동 복사가 안 돼요. 글자를 길게 눌러 전체 선택 후 복사하세요.';}};
+  $('#bkFile').onclick=()=>{$('#bkMsg').textContent=downloadBackup()?'다운로드 폴더에 저장했어요.':'저장하지 못했어요.';};
+  $('#bkFileLoad').onclick=()=>pickBackupFile((e,n)=>{ $('#bkMsg').textContent=e?'파일을 읽지 못했어요.':`${n}자의 기록을 불러왔어요.`; if(!e) setTimeout(renderHome,1200); });
   $('#bkLoad').onclick=()=>{try{const o=JSON.parse($('#bkText').value.trim());if(!o||typeof o.sr!=='object')throw 0;
     let n=0;for(const h in o.sr){const a=o.sr[h],b=S.sr[h];if(BY[h]&&a&&typeof a.s==='number'&&(!b||(a.n||0)>(b.n||0))){S.sr[h]=a;n++;}}
     save();$('#bkMsg').textContent=`${n}자의 기록을 불러왔어요.`;setTimeout(renderHome,1200);}catch(e){$('#bkMsg').textContent='백업 글자가 올바르지 않아요. 전체를 빠짐없이 붙여 넣었는지 확인하세요.';}};
@@ -407,9 +432,10 @@ function finish(){
   const uniq=new Set(list.map(x=>x.h)).size;
   const lapsed=Object.keys(session.requeued).length;
   session=null;
+  const autoBk = S.lastBk!==today() && Object.keys(S.sr).length && downloadBackup();
   const sub=`${uniq}자 ${kind==='due'?'복습':'학습'} 완료 · 틀린 한자 ${lapsed}자<br>`+
     (lapsed?'틀린 한자는 10분 뒤부터 다시 복습에 나와요.<br>':'')+
-    '맞힌 한자는 망각 곡선 간격에 맞춰 다음 복습이 잡혔어요.';
+    '맞힌 한자는 망각 곡선 간격에 맞춰 다음 복습이 잡혔어요.'+(autoBk?'<br>오늘 기록을 백업 파일로 다운로드 폴더에 저장했어요.':'');
   app.innerHTML=doneHTML('수고했어요!',sub);
   bindDone();
 }
