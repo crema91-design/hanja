@@ -1,5 +1,5 @@
 // 필수한자 1800 오프라인 캐시
-const CACHE = 'hanja1800-v1';
+const CACHE = 'hanja1800-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
